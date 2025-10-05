@@ -47,6 +47,8 @@
     </div>
 
     <script>
+        const knownDevices = JSON.parse(localStorage.getItem('knownDevices')) || [];
+
         // --- Application State ---
         let state = {
             currentScreen: 'device-screen',
@@ -98,6 +100,10 @@
                 const data = await response.json();
                 state.authToken = data.token;
                 localStorage.setItem(`authToken_${state.currentDevice}`, state.authToken);
+                if (!knownDevices.includes(state.currentDevice)) {
+                    knownDevices.push(state.currentDevice);
+                    localStorage.setItem('knownDevices', JSON.stringify(knownDevices));
+                }
                 setupControlPanel();
                 showScreen('control-panel-screen');
             } catch (error) {
@@ -184,6 +190,22 @@
             state.sockets.ws1.send(JSON.stringify(command));
             logTo('ws1-log', `Sent: ${JSON.stringify(command)}`);
         }
+
+        function populateDeviceList() {
+            const deviceListDiv = document.getElementById('device-list');
+            deviceListDiv.innerHTML = '<h4>Known Devices:</h4>';
+            knownDevices.forEach(device => {
+                const btn = document.createElement('button');
+                btn.textContent = device;
+                btn.onclick = () => {
+                    document.getElementById('device-hostname').value = device;
+                    connectToDevice();
+                };
+                deviceListDiv.appendChild(btn);
+            });
+        }
+
+        window.onload = populateDeviceList;
     </script>
 </body>
 </html>
