@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="https://www.torrentwater.com/wp-content/uploads/2024/10/cropped-TorrentWater_Swirl_200dpi-32x32.png" sizes="32x32">
     <title>Torrent Water Raspi Controller</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // 2. Configure Tailwind with your custom color palette
@@ -132,7 +133,7 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             try {
-                const response = await fetch(`https://${state.currentDevice}/api-token-auth/`, {
+                const response = await fetch(`https://${state.currentDevice}/auth/token`, { // <-- Changed URL
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -191,9 +192,9 @@
 
         async function sendRestCommand() {
             try {
-                const response = await fetch(`https://${state.currentDevice}/cmd/sys/status`, {
-                    headers: { 'Authorization': `Token ${state.authToken}` }
-                });
+                const response = await fetch(`https://${state.currentDevice}/cmd/sys/status`, { 
+                     headers: { 'Authorization': `Token ${state.authToken}` }
+                 });
                 if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
                 const data = await response.json();
                 logTo('rest-log', JSON.stringify(data, null, 2));
@@ -204,21 +205,44 @@
 
         function connectWebSocket(socketId, path) {
             if (state.sockets[socketId]) return;
-            const url = `wss://${state.currentDevice}${path}?token=${state.authToken}`;
-            const socket = new WebSocket(url);
-            state.sockets[socketId] = socket;
+            const url = `wss://${state.currentDevice}`; // Connect to the base URL
+            const socket = io(url, {
+                 transports: ['websocket'], // You can force websockets if needed
+                 auth: {
+                     token: state.authToken
+                 }
+             });
+            state.sockets.main = socket;
+            // state.sockets[socketId] = socket;
 
-            socket.onopen = () => {
-                logTo(`${socketId}-log`, 'Connection established.');
-                if (socketId === 'ws1') document.getElementById('ws1-commands').style.display = 'block';
-            };
-            socket.onmessage = (event) => logTo(`${socketId}-log`, `Received: ${event.data}`);
-            socket.onclose = () => {
-                logTo(`${socketId}-log`, 'Connection closed.');
-                if (socketId === 'ws1') document.getElementById('ws1-commands').style.display = 'none';
-                state.sockets[socketId] = null;
-            };
-            socket.onerror = (err) => logTo(`${socketId}-log`, 'WebSocket Error.');
+            socket.on('connect', () => {
+                logTo('ws1-log', 'Socket.IO connected.');
+                // Automatically join rooms after connecting
+                socket.emit('join_state_room');
+                socket.emit('join_flash_room');
+            });
+            
+            socket.on('disconnect', (reason) => {
+                logTo('ws1-log', `Socket.IO disconnected: ${reason}`);
+                state.sockets.main = null;
+            });
+            
+            socket.on('connect_error', (err) => {
+                 logTo('ws1-log', `Socket.IO connection error: ${err.message}`);
+            });
+            
+            // Listen for specific response/broadcast events
+            socket.on('spget_response', (data) => {
+                logTo('ws1-log', `Received spget_response: ${JSON.stringify(data)}`);
+            });
+            
+            socket.on('state_update', (data) => {
+                 logTo('ws2-log', `Received state_update: ${JSON.stringify(data)}`);
+            });
+            
+            socket.on('flash_status_update', (data) => {
+                 logTo('ws3-log', `Received flash_status_update: ${JSON.stringify(data)}`);
+            });
         }
 
         function disconnectWebSocket(socketId) {
@@ -229,9 +253,9 @@
 
         // --- WS1 Command Functions ---
         function ws1_spget() {
-            const command = { cmd: "spget", start: 0, end: 3 };
-            state.sockets.ws1.send(JSON.stringify(command));
-            logTo('ws1-log', `Sent: ${JSON.stringify(command)}`);
+            const data = { start: 0, end: 3 }; // No 'cmd' needed
+            state.sockets.main.emit('spget', data); // Emit the 'spget' event
+            logTo('ws1-log', `Sent event 'spget': ${JSON.stringify(data)}`);
         }
         function ws1_spset() {
             const command = { cmd: "spset", start: 0, end: 3, values: [99, 100] };
