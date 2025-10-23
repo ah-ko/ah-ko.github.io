@@ -272,87 +272,106 @@
 
     // --- Socket.IO Connection Logic ---
     function connectSocketIO() {
+        // Prevent multiple connection attempts
         if (state.socket) {
-             logTo('ws1-log', 'Socket.IO connection attempt already in progress or connected.');
-             return; // Already connected or attempting
-        }
-        if (!state.currentDevice || !state.authToken) {
-            logTo('ws1-log', 'Cannot connect Socket.IO: Missing device or auth token.');
+            logTo('ws1-log', 'Socket.IO connection attempt already in progress or connected.');
             return;
         }
-
+        // Ensure prerequisites are met
+        if (!state.currentDevice || !state.authToken) {
+            logTo('ws1-log', 'Cannot connect Socket.IO: Missing device or auth token.');
+            alert('Cannot connect Socket.IO: Missing device or auth token.'); // Alert user
+            return;
+        }
+    
         const url = `wss://${state.currentDevice}`; // Use wss:// for HTTPS Caddy
         logTo('ws1-log', `Attempting Socket.IO connection to ${url}...`);
-
-        // Note: The path option defaults to /socket.io/, which matches the backend mount
+    
         const socket = io(url, {
             transports: ['websocket'], // Force WebSocket transport
             auth: { token: state.authToken },
-            // For development with mkcert, rejectUnauthorized is usually NOT needed
-            // If you still have cert issues specifically for WebSocket, you MIGHT need it,
-            // but it reduces security. Try without it first.
-            // rejectUnauthorized: false
+            // rejectUnauthorized: false // Keep commented unless absolutely needed for cert issues
         });
-        state.socket = socket; // Store the socket instance
-
-        // --- Event Listeners ---
+    
+        // --- Store the socket instance immediately ---
+        state.socket = socket;
+    
+        // --- Centralized Event Listener Setup ---
+        // Remove previous listeners (just in case of weird state)
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('connect_error');
+        socket.off('spget_response');
+        socket.off('state_update');
+        socket.off('flash_status_update');
+    
+        // Attach NEW listeners
         socket.on('connect', () => {
             logTo('ws1-log', `Socket.IO connected successfully (SID: ${socket.id}).`);
-            document.getElementById('ws1-commands').style.display = 'block'; // Show command buttons
-
-            // Emit join room events *with callbacks* to log success/failure
+            // Show command buttons only after successful connection
+            const commandDiv = document.getElementById('ws1-commands');
+            if (commandDiv) commandDiv.style.display = 'block';
+    
+            // Emit join room events with callbacks
             socket.emit('join_state_room', {}, (response) => {
-                 if (response && response.status === 'joined') {
-                     logTo('ws2-log', `Successfully joined state room.`);
-                 } else {
-                     logTo('ws2-log', `Failed to join state room: ${JSON.stringify(response)}`);
-                 }
+                if (response && response.status === 'joined') {
+                    logTo('ws2-log', `Successfully joined state room.`);
+                } else {
+                    logTo('ws2-log', `Failed to join state room: ${JSON.stringify(response)}`);
+                }
             });
             socket.emit('join_flash_room', {}, (response) => {
-                 if (response && response.status === 'joined') {
-                     logTo('ws3-log', `Successfully joined flash room.`);
-                 } else {
-                     logTo('ws3-log', `Failed to join flash room: ${JSON.stringify(response)}`);
-                 }
+                if (response && response.status === 'joined') {
+                    logTo('ws3-log', `Successfully joined flash room.`);
+                } else {
+                    logTo('ws3-log', `Failed to join flash room: ${JSON.stringify(response)}`);
+                }
             });
         });
-
+    
         socket.on('disconnect', (reason) => {
             logTo('ws1-log', `Socket.IO disconnected: ${reason}`);
-            document.getElementById('ws1-commands').style.display = 'none';
+            // Hide command buttons on disconnect
+            const commandDiv = document.getElementById('ws1-commands');
+            if (commandDiv) commandDiv.style.display = 'none';
             // Only clear the socket if it's the current one disconnecting
+            // Check state.socket exists before comparing id
             if (state.socket && state.socket.id === socket.id) {
                 state.socket = null;
             }
         });
-
+    
         socket.on('connect_error', (err) => {
             logTo('ws1-log', `Socket.IO connection error: ${err.message}`);
             console.error("Socket.IO Connection Error:", err);
-            // Consider adding more details like err.data if available
+            // Hide command buttons on connection error
+            const commandDiv = document.getElementById('ws1-commands');
+            if (commandDiv) commandDiv.style.display = 'none';
+             // Check state.socket exists before comparing id
             if (state.socket && state.socket.id === socket.id) {
-                 state.socket = null; // Clear state if this connection failed
+                state.socket = null; // Clear state if this connection failed
             }
-             // Optionally, alert the user or attempt manual reconnect later
-             // alert(`Failed to connect Socket.IO: ${err.message}`);
+            alert(`Failed to connect Socket.IO: ${err.message}. Check logs.`); // Alert user
         });
-
+    
         // --- Custom Event Listeners ---
         socket.on('spget_response', (data) => {
+            // This logs command responses to the WS1 box
             logTo('ws1-log', `Received spget_response: ${JSON.stringify(data)}`);
         });
-
+    
         socket.on('state_update', (data) => {
+            // This logs state broadcasts to the WS2 box
             logTo('ws2-log', `Received state_update: ${JSON.stringify(data)}`);
+            console.log('Received state_update:', data); // Add console log for debugging
         });
-
+    
         socket.on('flash_status_update', (data) => {
+            // This logs flash broadcasts to the WS3 box
             logTo('ws3-log', `Received flash_status_update: ${JSON.stringify(data)}`);
+            console.log('Received flash_status_update:', data); // Add console log for debugging
         });
-
-         // Add listener for any other server-sent events if needed
-         // socket.on('some_other_event', (data) => { ... });
-    }
+    } // --- End of connectSocketIO function ---
 
     function disconnectSocketIO() {
         if (state.socket) {
