@@ -217,6 +217,7 @@
 
             socket.on('connect', () => {
                 logTo('ws1-log', 'Socket.IO connected.');
+                document.getElementById('ws1-commands').style.display = 'block';
                 // Automatically join rooms after connecting
                 socket.emit('join_state_room');
                 socket.emit('join_flash_room');
