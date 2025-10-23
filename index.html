@@ -360,16 +360,30 @@
             logTo('ws1-log', `Received spget_response: ${JSON.stringify(data)}`);
         });
     
+        console.log("Attaching listener for 'state_update'"); // DEBUG
         socket.on('state_update', (data) => {
-            // This logs state broadcasts to the WS2 box
-            logTo('ws2-log', `Received state_update: ${JSON.stringify(data)}`);
-            console.log('Received state_update:', data); // Add console log for debugging
+            console.log('>>> STATE_UPDATE EVENT RECEIVED:', data); // DEBUG
+            try {
+                const message = `Received state_update: ${JSON.stringify(data)}`;
+                logTo('ws2-log', message);
+                console.log('Logged to ws2-log successfully.'); // DEBUG
+            } catch (e) {
+                console.error('Error logging state_update:', e); // DEBUG
+                logTo('ws2-log', 'Error processing state_update message.');
+            }
         });
     
+        console.log("Attaching listener for 'flash_status_update'"); // DEBUG
         socket.on('flash_status_update', (data) => {
-            // This logs flash broadcasts to the WS3 box
-            logTo('ws3-log', `Received flash_status_update: ${JSON.stringify(data)}`);
-            console.log('Received flash_status_update:', data); // Add console log for debugging
+            console.log('>>> FLASH_STATUS_UPDATE EVENT RECEIVED:', data); // DEBUG
+            try {
+                const message = `Received flash_status_update: ${JSON.stringify(data)}`;
+                logTo('ws3-log', message);
+                console.log('Logged to ws3-log successfully.'); // DEBUG
+            } catch (e) {
+                console.error('Error logging flash_status_update:', e); // DEBUG
+                logTo('ws3-log', 'Error processing flash_status_update message.');
+            }
         });
     } // --- End of connectSocketIO function ---
 
